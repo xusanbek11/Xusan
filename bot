@@ -213,7 +213,4 @@ def text_ai_chat(message):
     elif "yem" in txt:
         bot.reply_to(message, "🍽️ Yemni kuniga 1-2 marta bering, oshiqchasi suvni kirlatadi.")
     else:
-        bot.reply_to(message, "🤖 Men akvarium va baliqlar parvarishi bo'yicha yordamchiman. Savollaringizni berishingiz mumkin!")
-
-bot.infinity_polling()
-  
+        bot.reply_to(message, "🤖 Men akvarium va baliqlar parvarishi bo'yicha yordamchiman. Savollaringizni berishing
