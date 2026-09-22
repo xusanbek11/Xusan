@@ -36,7 +36,7 @@ def keep_alive():
 # ==========================================
 BOT_TOKEN = "8528382883:AAE6XKlAFcu-_w7eH3wNWRScfa4AvhiCYi0"
 OCTO_SHOP_ID = "08521"  # Merchant ID[span_2](start_span)[span_2](end_span)
-OCTO_SECRET = "544336522865fa0b2850f862658c2424"  # Merchant Token[span_3](start_span)[span_3](end_span)
+OCTO_SECRET = "7bbcf0432ec62f6021be82d2e18597bb"  # Merchant Token[span_3](start_span)[span_3](end_span)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
