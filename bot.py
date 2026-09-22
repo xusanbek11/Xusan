@@ -4,25 +4,93 @@ import time
 from datetime import datetime, timedelta
 from threading import Thread
 
-from flask import Flask
+from flask import Flask, jsonify, request
 import requests
 import telebot
 from telebot import types
 
 # ==========================================
-# 24/7 ISHLASH UCHUN VEB-SERVER (FLASK)
+# 1. REKVIZITLAR VA SOZLAMALAR
 # ==========================================
-app = Flask('')
+BOT_TOKEN = "8528382883:AAE6XKlAFcu-_w7eH3wNWRScfa4AvhiCYi0"
+OCTO_SHOP_ID = 8521  # Boshidagi ortiqcha '0' olib tashlandi
+OCTO_SECRET = "7bbcf0432ec62f6021be82d2e18597bb"
+
+# Render serveringizning ochiq domeni
+RENDER_URL = "https://xusan-1.onrender.com"
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+try:
+    BOT_USERNAME = bot.get_me().username
+except Exception:
+    BOT_USERNAME = "BaliqchiAI1_bot"
+
+# ==========================================
+# 2. VEB-SERVER (FLASK) VA OCTO WEBHOOK
+# ==========================================
+app = Flask("")
 
 
-@app.route('/')
+@app.route("/")
 def home():
-    return "Bot 24/7 rejimida muvaffaqiyatli ishlayapti!"
+    return "Bot va Webhook 24/7 rejimida muvaffaqiyatli ishlayapti!"
+
+
+# OCTO TO'LOV TIZIMIDAN KELADIGAN AVTOMATIK BILDIRISHNOMA
+@app.route("/octo-webhook", methods=["POST"])
+def octo_webhook():
+    try:
+        data = (
+            request.get_json(force=True, silent=True) or request.form.to_dict()
+        )
+        print("OCTO WEBHOOK DATA:", data)
+
+        status = data.get("status") or data.get("payment_status")
+        trans_id = data.get("merchant_trans_id")
+
+        if trans_id and status in ["succeeded", "paid", "SUCCESS"]:
+            conn = sqlite3.connect("bot_database.db")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT user_id FROM payments WHERE trans_id = ?", (trans_id,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                user_id = row[0]
+                set_user_vip(user_id, days=30)
+                cursor.execute(
+                    "UPDATE payments SET status = 'paid' WHERE trans_id = ?",
+                    (trans_id,),
+                )
+                conn.commit()
+
+                # Foydalanuvchiga Telegram orqali xabar yuborish
+                try:
+                    bot.send_message(
+                        user_id,
+                        "🎉 **To'lov muvaffaqiyatli qabul qilindi!**\n\n"
+                        "Sizning 30 kunlik VIP obunangiz avtomatik"
+                        " faollashtirildi. Endi botning barcha"
+                        " imkoniyatlaridan to'liq foydalanishingiz mumkin!",
+                        parse_mode="Markdown",
+                    )
+                except Exception as e:
+                    print(f"Foydalanuvchiga xabar yuborishda xatolik: {e}")
+
+            conn.close()
+            return jsonify({"accept": "success"}), 200
+
+        return jsonify({"accept": "ignored"}), 200
+    except Exception as e:
+        print(f"Webhook xatolik: {e}")
+        return jsonify({"error": str(e)}), 400
 
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host="0.0.0.0", port=port)
 
 
 def keep_alive():
@@ -32,39 +100,24 @@ def keep_alive():
 
 
 # ==========================================
-# REKVIZITLAR (Rasmdan olindi)
-# ==========================================
-BOT_TOKEN = "8528382883:AAE6XKlAFcu-_w7eH3wNWRScfa4AvhiCYi0"
-OCTO_SHOP_ID = "08521"  # Merchant ID[span_2](start_span)[span_2](end_span)
-OCTO_SECRET = "7bbcf0432ec62f6021be82d2e18597bb"  # Merchant Token[span_3](start_span)[span_3](end_span)
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
-try:
-    BOT_USERNAME = bot.get_me().username
-except Exception as e:
-    BOT_USERNAME = "bot"
-
-
-# ==========================================
-# MA'LUMOTLAR BAZASI (SQLite)
+# 3. MA'LUMOTLAR BAZASI (SQLite)
 # ==========================================
 def init_db():
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             vip_until TIMESTAMP
         )
-    ''')
-    cursor.execute('''
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS payments (
             trans_id TEXT PRIMARY KEY,
             user_id INTEGER,
             status TEXT
         )
-    ''')
+    """)
     conn.commit()
     conn.close()
 
@@ -75,9 +128,7 @@ init_db()
 def get_user_vip(user_id):
     conn = sqlite3.connect("bot_database.db")
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT vip_until FROM users WHERE user_id = ?", (user_id,)
-    )
+    cursor.execute("SELECT vip_until FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     conn.close()
     if row and row[0]:
@@ -101,7 +152,7 @@ def set_user_vip(user_id, days=30):
 
 
 # ==========================================
-# KASALLIKLAR BAZASI
+# 4. KASALLIKLAR BAZASI
 # ==========================================
 DISEASES = {
     "oq doq": {
@@ -136,9 +187,9 @@ DISEASES = {
 
 
 # ==========================================
-# MENYU VA MULOQOT
+# 5. MENYU VA MULOQOT
 # ==========================================
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=["start"])
 def start_cmd(message):
     user_id = message.from_user.id
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -169,7 +220,7 @@ def check_sub_status(message):
 
 
 # ==========================================
-# OCTO API - TO'LOV YARATISH
+# 6. OCTO API - TO'LOV YARATISH
 # ==========================================
 @bot.message_handler(func=lambda m: m.text == "💳 VIP Obuna (30 kun)")
 def create_octo_payment(message):
@@ -180,21 +231,23 @@ def create_octo_payment(message):
         "octo_shop_id": OCTO_SHOP_ID,
         "octo_secret": OCTO_SECRET,
         "merchant_trans_id": trans_id,
-        "amount": 30000.00,
+        "total_sum": 30000.00,
         "currency": "UZS",
         "description": "30 kunlik VIP Obuna",
         "return_url": f"https://t.me/{BOT_USERNAME}",
+        "notify_url": f"{RENDER_URL}/octo-webhook",
     }
 
     try:
         res = requests.post(
-            "https://secure.octo.uz/prepare", json=payload, timeout=10
+            "https://secure.octo.uz/prepare_payment", json=payload, timeout=10
         )
         data = res.json()
+        print("OCTO PREPARE RESPONSE:", data)
 
-        if data.get("error") == 0 and "octo_pay_url" in data:
-            pay_url = data["octo_pay_url"]
+        pay_url = data.get("octo_pay_url") or data.get("pay_url")
 
+        if pay_url:
             conn = sqlite3.connect("bot_database.db")
             cursor = conn.cursor()
             cursor.execute(
@@ -225,17 +278,17 @@ def create_octo_payment(message):
                 parse_mode="Markdown",
             )
         else:
-            bot.send_message(
-                user_id,
-                "❌ To'lov tizimiga ulanishda xatolik bo'ldi. Merchant"
-                " sozlamalarini tekshiring.",
+            err_msg = (
+                data.get("message") or data.get("error") or "Noma'lum xatolik"
             )
+            bot.send_message(user_id, f"❌ To'lov tizimida xatolik: {err_msg}")
     except Exception as e:
+        print("Payment Creation Error:", e)
         bot.send_message(user_id, "❌ Server bilan aloqa o'rnatib bo'lmadi.")
 
 
 # ==========================================
-# OCTO API - TO'LOVNI TEKSHIRISH
+# 7. OCTO API - TO'LOVNI TEKSHIRISH
 # ==========================================
 @bot.callback_query_handler(func=lambda call: call.data.startswith("check_"))
 def verify_octo_payment(call):
@@ -250,13 +303,14 @@ def verify_octo_payment(call):
 
     try:
         res = requests.post(
-            "https://secure.octo.uz/check", json=payload, timeout=10
+            "https://secure.octo.uz/check_payment", json=payload, timeout=10
         )
         data = res.json()
+        print("OCTO CHECK RESPONSE:", data)
 
-        status = data.get("status")
+        status = data.get("status") or data.get("payment_status")
 
-        if status in ["succeeded", "paid"]:
+        if status in ["succeeded", "paid", "SUCCESS"]:
             set_user_vip(user_id, days=30)
             bot.answer_callback_query(
                 call.id, "✅ To'lov muvaffaqiyatli o'tdi!", show_alert=True
@@ -271,25 +325,24 @@ def verify_octo_payment(call):
                 call.id, "⏳ To'lov hali amalga oshirilmadi.", show_alert=True
             )
     except Exception as e:
+        print("Check Payment Error:", e)
         bot.answer_callback_query(
             call.id, "❌ Tekshirishda xatolik yuz berdi.", show_alert=True
         )
 
 
-# Callback orqali to'lov tugmasi bosilganda
 @bot.callback_query_handler(func=lambda call: call.data == "buy_vip_now")
 def buy_vip_callback(call):
     create_octo_payment(call.message)
 
 
 # ==========================================
-# KASALLIKNI ANIQLASH (FAQAT VIP UCHUN)
+# 8. KASALLIKNI ANIQLASH (FAQAT VIP UCHUN)
 # ==========================================
 @bot.message_handler(func=lambda m: m.text == "🔬 Kasallikni aniqlash")
 def ask_disease(message):
     user_id = message.from_user.id
 
-    # VIP Tekshiruv
     if not get_user_vip(user_id):
         kb = types.InlineKeyboardMarkup()
         kb.add(
@@ -351,7 +404,7 @@ def show_dis_info(call):
 
 
 # ==========================================
-# UMUMIY MASLAHATLAR VA AI CHAT
+# 9. UMUMIY MASLAHATLAR VA AI CHAT
 # ==========================================
 @bot.message_handler(func=lambda m: m.text == "📅 Kunlik maslahat")
 def daily_tip(message):
@@ -388,7 +441,9 @@ def text_ai_chat(message):
         )
 
 
-# Botni va Web-serverni parallel ishga tushirish
+# ==========================================
+# 10. ISHGA TUSHIRISH
+# ==========================================
 if __name__ == "__main__":
-    keep_alive()  # Web serverni fonda ishga tushiradi (24/7 faollik uchun)
+    keep_alive()
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
