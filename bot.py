@@ -13,8 +13,8 @@ from telebot import types
 # 1. REKVIZITLAR VA SOZLAMALAR
 # ==========================================
 BOT_TOKEN = "8528382883:AAE6XKlAFcu-_w7eH3wNWRScfa4AvhiCYi0"
-OCTO_SHOP_ID = 8521  # Boshidagi ortiqcha '0' olib tashlandi
-OCTO_SECRET = "7bbcf0432ec62f6021be82d2e18597bb"
+OCTO_SHOP_ID = 08521  # Boshidagi ortiqcha '0' olib tashlandi
+OCTO_SECRET = "657b5c85fa0b193091f00a8b52a57f93"
 
 # Render serveringizning ochiq domeni
 RENDER_URL = "https://xusan-1.onrender.com"
